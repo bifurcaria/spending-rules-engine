@@ -1,2 +1,13 @@
+# dependencies
 node_modules
+
+# environment variables
 *.env
+
+# build
+dist/
+
+# logs
+.DS_Store
+coverage/
+npm-debug.log*
