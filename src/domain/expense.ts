@@ -10,6 +10,7 @@ export enum ExpenseCategory {
 	FOOD = "FOOD",
 	TRANSPORT = "TRANSPORT",
 	SOFTWARE = "SOFTWARE",
+	LODGING = "LODGING",
 	OTHER = "OTHER",
 }
 export enum ExpenseStatus {
