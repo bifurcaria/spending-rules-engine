@@ -54,37 +54,37 @@ describe("ExpenseValidator (Part 1)", () => {
 		jest.useRealTimers();
 	});
 
-	test("age rule: APPROVED when daysOld is less than or equal to pendingAfterDays", () => {
+	test("age rule: APPROVED when daysOld is less than or equal to pendingAfterDays", async () => {
 		const policy = makePolicy();
 		const employee = makeEmployee();
 		const expense = makeExpense({ date: new Date("2025-01-21T00:00:00.000Z") }); // ~10 days old
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.APPROVED);
 		expect(result.alerts).toEqual([]);
 	});
 
-	test("age rule: PENDING when daysOld is between pendingAfterDays and rejectedAfterDays", () => {
+	test("age rule: PENDING when daysOld is between pendingAfterDays and rejectedAfterDays", async () => {
 		const policy = makePolicy();
 		const employee = makeEmployee();
 		const expense = makeExpense({ date: new Date("2024-12-20T00:00:00.000Z") }); // ~42 days old
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.PENDING);
 		expect(result.alerts.some((a) => a.code === "AGE_LIMIT")).toBe(true);
 	});
 
-	test("age rule: REJECTED when daysOld is greater than rejectedAfterDays", () => {
+	test("age rule: REJECTED when daysOld is greater than rejectedAfterDays", async () => {
 		const policy = makePolicy();
 		const employee = makeEmployee();
 		const expense = makeExpense({ date: new Date("2024-11-01T00:00:00.000Z") }); // ~91 days old
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "AGE_LIMIT")).toBe(true);
 	});
 
-	test("category limit: APPROVED when amount is less than or equal to approvedUpTo", () => {
+	test("category limit: APPROVED when amount is less than or equal to approvedUpTo", async () => {
 		const policy = makePolicy({
 			categoryLimits: {
 				[ExpenseCategory.FOOD]: { approvedUpTo: 100, pendingUpTo: 150 },
@@ -96,12 +96,12 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 90,
 		});
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.APPROVED);
 		expect(result.alerts).toEqual([]);
 	});
 
-	test("category limit: PENDING when amount is between approvedUpTo and pendingUpTo", () => {
+	test("category limit: PENDING when amount is between approvedUpTo and pendingUpTo", async () => {
 		const policy = makePolicy({
 			categoryLimits: {
 				[ExpenseCategory.FOOD]: { approvedUpTo: 100, pendingUpTo: 150 },
@@ -113,12 +113,12 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 120,
 		});
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.PENDING);
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 	});
 
-	test("category limit: REJECTED when amount is greater than pendingUpTo", () => {
+	test("category limit: REJECTED when amount is greater than pendingUpTo", async () => {
 		const policy = makePolicy({
 			categoryLimits: {
 				[ExpenseCategory.FOOD]: { approvedUpTo: 100, pendingUpTo: 150 },
@@ -130,12 +130,12 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 160,
 		});
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 	});
 
-	test("currency conversion: converts non-base currency and applies category limits to converted amount", () => {
+	test("currency conversion: converts non-base currency and applies category limits to converted amount", async () => {
 		const policy = makePolicy({
 			baseCurrency: "USD",
 			categoryLimits: {
@@ -150,14 +150,14 @@ describe("ExpenseValidator (Part 1)", () => {
 			currency: "CLP",
 		});
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.APPROVED); // 100 USD <= 100 approvedUpTo
 		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
 			true,
 		);
 	});
 
-	test("currency conversion: converted amount exceeds limits", () => {
+	test("currency conversion: converted amount exceeds limits", async () => {
 		const policy = makePolicy({
 			baseCurrency: "USD",
 			categoryLimits: {
@@ -165,14 +165,14 @@ describe("ExpenseValidator (Part 1)", () => {
 			},
 		});
 		const employee = makeEmployee();
-		// 80 CLP -> 160 USD (mock doubles the amount), exceeds pendingUpTo
+		// 200,000 CLP -> ~221 USD with live rates (CLP ~902/USD), exceeds pendingUpTo
 		const expense = makeExpense({
 			category: ExpenseCategory.FOOD,
-			amount: 80,
+			amount: 200_000,
 			currency: "CLP",
 		});
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.REJECTED); // 160 USD > 150 pendingUpTo
 		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
 			true,
@@ -180,7 +180,7 @@ describe("ExpenseValidator (Part 1)", () => {
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 	});
 
-	test("cost center cross-rule: REJECTED when forbidden category is used", () => {
+	test("cost center cross-rule: REJECTED when forbidden category is used", async () => {
 		const policy = makePolicy({
 			costCenterRules: [
 				{
@@ -192,14 +192,14 @@ describe("ExpenseValidator (Part 1)", () => {
 		const employee = makeEmployee({ costCenterId: "core_engineering" });
 		const expense = makeExpense({ category: ExpenseCategory.FOOD });
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "COST_CENTER_POLICY")).toBe(
 			true,
 		);
 	});
 
-	test("final resolution: REJECTED wins over PENDING (alerts accumulate)", () => {
+	test("final resolution: REJECTED wins over PENDING (alerts accumulate)", async () => {
 		const policy = makePolicy({
 			categoryLimits: {
 				[ExpenseCategory.FOOD]: { approvedUpTo: 100, pendingUpTo: 150 },
@@ -217,7 +217,7 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 120, // would be PENDING by category limit, but cost center forces REJECTED
 		});
 
-		const result = engine.validate(expense, employee, policy);
+		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 		expect(result.alerts.some((a) => a.code === "COST_CENTER_POLICY")).toBe(
