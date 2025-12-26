@@ -10,5 +10,6 @@ Minimal setup and usage notes.
 ## Run
 - Dev/watch: `npm run dev`
 - Tests: `npm test`
+- Batch analyzer: `npm run analyze` (for now it reads `gastos_historicos.csv`, and writes `ANALISIS.md`)
 
 The FX client calls the Open Exchange Rates `/api/latest.json` endpoint and converts amounts locally using the returned `rates`.***
