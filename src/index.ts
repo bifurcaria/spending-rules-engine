@@ -26,7 +26,7 @@ const policy: Policy = {
 
 const expense = {
 	id: "1",
-	amount: 120,
+	amount: 120000,
 	currency: "CLP",
 	category: ExpenseCategory.FOOD,
 	date: new Date(),
@@ -39,4 +39,11 @@ const employee: Employee = {
 	costCenterId: "core_sales",
 };
 
-console.log(engine.validate(expense, employee, policy));
+(async () => {
+	try {
+		const result = await engine.validate(expense, employee, policy);
+		console.log(JSON.stringify(result, null, 2));
+	} catch (error) {
+		console.error("Validation error:", error);
+	}
+})();
