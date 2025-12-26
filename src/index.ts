@@ -27,7 +27,7 @@ const policy: Policy = {
 const expense = {
 	id: "1",
 	amount: 120,
-	currency: "USD",
+	currency: "CLP",
 	category: ExpenseCategory.FOOD,
 	date: new Date(),
 };
