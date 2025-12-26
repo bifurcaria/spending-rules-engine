@@ -3,6 +3,7 @@ import { type Expense, ExpenseStatus } from "../domain/expense";
 import type { Policy } from "../domain/policy";
 import type { Alert, ValidationResult } from "../domain/result";
 import { daysBetween } from "../utils/date";
+import { convertCurrency } from "../utils/fx";
 
 type RuleContext = {
 	expense: Expense;
@@ -18,6 +19,21 @@ export class ExpenseValidator {
 	): ValidationResult {
 		const ctx: RuleContext = { expense, employee, policy };
 		const alerts: Alert[] = [];
+
+		// Handle currency mismatch
+		if (ctx.expense.currency !== ctx.policy.baseCurrency) {
+			const convertedAmount = convertCurrency(
+				ctx.expense.amount,
+				ctx.expense.currency,
+				ctx.policy.baseCurrency,
+			);
+			const fromCurrency = ctx.expense.currency;
+			ctx.expense.amount = convertedAmount;
+			alerts.push({
+				code: "CURRENCY_MISMATCH",
+				message: `Converting from ${fromCurrency} to ${ctx.policy.baseCurrency}. Initial value is ${ctx.expense.amount.toFixed(2)} ${fromCurrency}, final value is ${convertedAmount.toFixed(2)} ${ctx.policy.baseCurrency}.`,
+			});
+		}
 
 		// Check each rule and collect the most restrictive status
 		const ageStatus = this.checkAge(ctx, alerts);
@@ -71,7 +87,7 @@ export class ExpenseValidator {
 		if (ctx.expense.amount > categoryPolicy.pendingUpTo) {
 			alerts.push({
 				code: "CATEGORY_LIMIT",
-				message: `Exceeds maximum allowed for ${ctx.expense.category}.`,
+				message: `$${ctx.expense.amount.toFixed(2)} exceeds maximum allowed ($${categoryPolicy.pendingUpTo.toFixed(2)}) for ${ctx.expense.category}.`,
 			});
 			return ExpenseStatus.REJECTED;
 		}
@@ -80,7 +96,7 @@ export class ExpenseValidator {
 		if (ctx.expense.amount > categoryPolicy.approvedUpTo) {
 			alerts.push({
 				code: "CATEGORY_LIMIT",
-				message: `Exceeds auto-approval limit for ${ctx.expense.category}; requires review.`,
+				message: `$${ctx.expense.amount.toFixed(2)} exceeds auto-approval limit ($${categoryPolicy.approvedUpTo.toFixed(2)}), requires review.`,
 			});
 			return ExpenseStatus.PENDING;
 		}
