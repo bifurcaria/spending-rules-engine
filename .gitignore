@@ -11,3 +11,10 @@ dist/
 .DS_Store
 coverage/
 npm-debug.log*
+
+# Challenge related files
+*.pdf
+*.csv
+
+# Cache files
+.npm-cache/
