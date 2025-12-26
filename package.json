@@ -7,7 +7,8 @@
 		"build": "tsc",
 		"start": "node dist/index.js",
 		"dev": "tsx watch src/index.ts",
-		"test": "jest"
+		"test": "jest",
+		"analyze": "tsx src/batch/analyze.ts"
 	},
 	"type": "commonjs",
 	"repository": {
@@ -31,6 +32,7 @@
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
+		"csv-parser": "^3.0.0",
 		"dotenv": "^17.2.3",
 		"zod": "^4.2.1"
 	}
