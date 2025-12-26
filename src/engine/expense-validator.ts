@@ -3,7 +3,7 @@ import { type Expense, ExpenseStatus } from "../domain/expense";
 import type { Policy } from "../domain/policy";
 import type { Alert, ValidationResult } from "../domain/result";
 import { daysBetween } from "../utils/date";
-import { convertCurrency } from "../utils/fx";
+import { convertCurrency, fetchLatestRates } from "../utils/fx";
 
 type RuleContext = {
 	expense: Expense;
@@ -12,27 +12,39 @@ type RuleContext = {
 };
 
 export class ExpenseValidator {
-	public validate(
+	public async validate(
 		expense: Expense,
 		employee: Employee,
 		policy: Policy,
-	): ValidationResult {
+	): Promise<ValidationResult> {
 		const ctx: RuleContext = { expense, employee, policy };
 		const alerts: Alert[] = [];
 
 		// Handle currency mismatch
 		if (ctx.expense.currency !== ctx.policy.baseCurrency) {
-			const convertedAmount = convertCurrency(
-				ctx.expense.amount,
-				ctx.expense.currency,
-				ctx.policy.baseCurrency,
-			);
+			const originalAmount = ctx.expense.amount;
 			const fromCurrency = ctx.expense.currency;
-			ctx.expense.amount = convertedAmount;
-			alerts.push({
-				code: "CURRENCY_MISMATCH",
-				message: `Converting from ${fromCurrency} to ${ctx.policy.baseCurrency}. Initial value is ${ctx.expense.amount.toFixed(2)} ${fromCurrency}, final value is ${convertedAmount.toFixed(2)} ${ctx.policy.baseCurrency}.`,
-			});
+			try {
+				const rates = await fetchLatestRates();
+				const convertedAmount = convertCurrency(
+					ctx.expense.amount,
+					ctx.expense.currency,
+					ctx.policy.baseCurrency,
+					rates,
+				);
+				ctx.expense.amount = convertedAmount;
+				alerts.push({
+					code: "CURRENCY_MISMATCH",
+					message: `Converting from ${fromCurrency} to ${ctx.policy.baseCurrency}. Initial value is ${originalAmount.toFixed(2)} ${fromCurrency}, final value is ${convertedAmount.toFixed(2)} ${ctx.policy.baseCurrency}.`,
+				});
+			} catch (error) {
+				// Currency conversion failed - mark as PENDING for manual review
+				alerts.push({
+					code: "CURRENCY_CONVERSION_ERROR",
+					message: `Failed to convert ${originalAmount.toFixed(2)} ${fromCurrency} to ${ctx.policy.baseCurrency}: ${error instanceof Error ? error.message : "Unknown error"}. Manual review required.`,
+				});
+				// Keep original amount - category limits won't apply correctly, but we've alerted
+			}
 		}
 
 		// Check each rule and collect the most restrictive status
@@ -41,11 +53,19 @@ export class ExpenseValidator {
 		const costCenterStatus = this.checkCostCenter(ctx, alerts);
 
 		// Get the most restrictive status
-		const finalStatus = this.getMostRestrictive([
+		let finalStatus = this.getMostRestrictive([
 			ageStatus,
 			categoryStatus,
 			costCenterStatus,
 		]);
+
+		// If currency conversion failed, ensure status is at least PENDING
+		if (
+			alerts.some((a) => a.code === "CURRENCY_CONVERSION_ERROR") &&
+			finalStatus === ExpenseStatus.APPROVED
+		) {
+			finalStatus = ExpenseStatus.PENDING;
+		}
 
 		return {
 			expenseId: expense.id,
