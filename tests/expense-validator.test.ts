@@ -135,6 +135,51 @@ describe("ExpenseValidator (Part 1)", () => {
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 	});
 
+	test("currency conversion: converts non-base currency and applies category limits to converted amount", () => {
+		const policy = makePolicy({
+			baseCurrency: "USD",
+			categoryLimits: {
+				[ExpenseCategory.FOOD]: { approvedUpTo: 100, pendingUpTo: 150 },
+			},
+		});
+		const employee = makeEmployee();
+		// 50 CLP -> 100 USD (mock doubles the amount)
+		const expense = makeExpense({
+			category: ExpenseCategory.FOOD,
+			amount: 50,
+			currency: "CLP",
+		});
+
+		const result = engine.validate(expense, employee, policy);
+		expect(result.status).toBe(ExpenseStatus.APPROVED); // 100 USD <= 100 approvedUpTo
+		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
+			true,
+		);
+	});
+
+	test("currency conversion: converted amount exceeds limits", () => {
+		const policy = makePolicy({
+			baseCurrency: "USD",
+			categoryLimits: {
+				[ExpenseCategory.FOOD]: { approvedUpTo: 100, pendingUpTo: 150 },
+			},
+		});
+		const employee = makeEmployee();
+		// 80 CLP -> 160 USD (mock doubles the amount), exceeds pendingUpTo
+		const expense = makeExpense({
+			category: ExpenseCategory.FOOD,
+			amount: 80,
+			currency: "CLP",
+		});
+
+		const result = engine.validate(expense, employee, policy);
+		expect(result.status).toBe(ExpenseStatus.REJECTED); // 160 USD > 150 pendingUpTo
+		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
+			true,
+		);
+		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
+	});
+
 	test("cost center cross-rule: REJECTED when forbidden category is used", () => {
 		const policy = makePolicy({
 			costCenterRules: [
