@@ -9,7 +9,7 @@
 		"noUncheckedIndexedAccess": true,
 		"exactOptionalPropertyTypes": true,
 		"strict": true,
-		"verbatimModuleSyntax": true,
+		"verbatimModuleSyntax": false,
 		"isolatedModules": true,
 		"noUncheckedSideEffectImports": true,
 		"noUnusedLocals": true,
