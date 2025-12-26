@@ -3,7 +3,11 @@ import { type Expense, ExpenseStatus } from "../domain/expense";
 import type { Policy } from "../domain/policy";
 import type { Alert, ValidationResult } from "../domain/result";
 import { daysBetween } from "../utils/date";
-import { convertCurrency, fetchLatestRates } from "../utils/fx";
+import {
+	convertCurrency,
+	type ExchangeRates,
+	fetchLatestRates,
+} from "../utils/fx";
 
 type RuleContext = {
 	expense: Expense;
@@ -16,6 +20,7 @@ export class ExpenseValidator {
 		expense: Expense,
 		employee: Employee,
 		policy: Policy,
+		rates?: ExchangeRates,
 	): Promise<ValidationResult> {
 		const ctx: RuleContext = { expense, employee, policy };
 		const alerts: Alert[] = [];
@@ -25,17 +30,17 @@ export class ExpenseValidator {
 			const originalAmount = ctx.expense.amount;
 			const fromCurrency = ctx.expense.currency;
 			try {
-				const rates = await fetchLatestRates();
+				const resolvedRates = rates ?? (await fetchLatestRates());
 				const convertedAmount = convertCurrency(
 					ctx.expense.amount,
 					ctx.expense.currency,
 					ctx.policy.baseCurrency,
-					rates,
+					resolvedRates,
 				);
 				ctx.expense.amount = convertedAmount;
 				alerts.push({
 					code: "CURRENCY_MISMATCH",
-					message: `Converting from ${fromCurrency} to ${ctx.policy.baseCurrency}. Initial value is ${originalAmount.toFixed(2)} ${fromCurrency}, final value is ${convertedAmount.toFixed(2)} ${ctx.policy.baseCurrency}.`,
+					message: `Converting ${originalAmount.toFixed(2)} ${fromCurrency} --> ${convertedAmount.toFixed(2)} ${ctx.policy.baseCurrency}.`,
 				});
 			} catch (error) {
 				// Currency conversion failed - mark as PENDING for manual review
