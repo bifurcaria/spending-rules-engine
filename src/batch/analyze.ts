@@ -2,6 +2,7 @@ import "dotenv/config";
 import csv from "csv-parser";
 import fs from "fs";
 import path from "path";
+import { z } from "zod";
 import type { Employee } from "../domain/employee";
 import {
 	type Expense,
@@ -12,17 +13,20 @@ import type { Policy } from "../domain/policy";
 import { ExpenseValidator } from "../engine/expense-validator";
 import { type ExchangeRates, fetchLatestRates } from "../utils/fx";
 
-type ParsedRow = {
-	gasto_id: string;
-	empleado_id: string;
-	empleado_nombre: string;
-	empleado_apellido: string;
-	empleado_cost_center: string;
-	categoria: string;
-	monto: string;
-	moneda: string;
-	fecha: string;
-};
+// Define Zod Schema for CSV Row
+const CsvRowSchema = z.object({
+	gasto_id: z.string(),
+	empleado_id: z.string(),
+	empleado_nombre: z.string(),
+	empleado_apellido: z.string(),
+	empleado_cost_center: z.string(),
+	categoria: z.string(),
+	monto: z.coerce.number(), // Coerce string to number
+	moneda: z.string(),
+	fecha: z.string().datetime({ offset: true }).or(z.string()), // Accept ISO string
+});
+
+type ParsedRow = z.infer<typeof CsvRowSchema>;
 
 type Anomaly =
 	| { code: "NEGATIVE_AMOUNT"; gastoId: string; amount: number }
@@ -73,7 +77,7 @@ function toCategory(raw: string): ExpenseCategory {
 function toExpense(row: ParsedRow): Expense {
 	return {
 		id: row.gasto_id,
-		amount: Number(row.monto),
+		amount: row.monto,
 		currency: row.moneda,
 		category: toCategory(row.categoria),
 		date: new Date(row.fecha),
@@ -105,7 +109,15 @@ async function readCsv(filePath: string): Promise<ParsedRow[]> {
 		const rows: ParsedRow[] = [];
 		fs.createReadStream(filePath)
 			.pipe(csv())
-			.on("data", (data: ParsedRow) => rows.push(data))
+			.on("data", (data: unknown) => {
+				const result = CsvRowSchema.safeParse(data);
+				if (result.success) {
+					rows.push(result.data);
+				} else {
+					console.error("Invalid CSV row:", result.error);
+					// Decide whether to reject or skip. Here skipping.
+				}
+			})
 			.on("end", () => resolve(rows))
 			.on("error", (err: unknown) => reject(err));
 	});
