@@ -14,6 +14,7 @@ type RuleContext = {
 	employee: Employee;
 	policy: Policy;
 	amountToCheck: number; // Added to avoid mutating expense.amount
+	asOf: Date;
 };
 
 export class ExpenseValidator {
@@ -22,7 +23,22 @@ export class ExpenseValidator {
 		employee: Employee,
 		policy: Policy,
 		rates?: ExchangeRates,
+		asOf: Date = new Date(),
 	): Promise<ValidationResult> {
+		if (expense.amount <= 0) {
+			const alerts: Alert[] = [
+				{
+					code: "NEGATIVE_AMOUNT",
+					message: `Expense has non-positive amount (${expense.amount}).`,
+				},
+			];
+			return {
+				expenseId: expense.id,
+				status: ExpenseStatus.REJECTED,
+				alerts,
+			};
+		}
+
 		let amountToCheck = expense.amount;
 		const alerts: Alert[] = [];
 
@@ -53,7 +69,7 @@ export class ExpenseValidator {
 			}
 		}
 
-		const ctx: RuleContext = { expense, employee, policy, amountToCheck };
+		const ctx: RuleContext = { expense, employee, policy, amountToCheck, asOf };
 
 		// Check each rule and collect the most restrictive status
 		const ageStatus = this.checkAge(ctx, alerts);
@@ -83,7 +99,7 @@ export class ExpenseValidator {
 	}
 
 	private checkAge(ctx: RuleContext, alerts: Alert[]): ExpenseStatus {
-		const daysOld = Math.max(0, daysBetween(ctx.expense.date, new Date()));
+		const daysOld = Math.max(0, daysBetween(ctx.expense.date, ctx.asOf));
 		const { rejectedAfterDays, pendingAfterDays } = ctx.policy.ageLimit;
 
 		if (daysOld > rejectedAfterDays) {

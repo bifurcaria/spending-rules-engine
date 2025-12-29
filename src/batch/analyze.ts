@@ -132,6 +132,15 @@ async function main() {
 	const rows = await readCsv(csvPath);
 	const validator = new ExpenseValidator();
 	const policy = makePolicy();
+	const asOf =
+		process.env.AS_OF_DATE !== undefined
+			? new Date(process.env.AS_OF_DATE)
+			: new Date();
+	if (Number.isNaN(asOf.getTime())) {
+		throw new Error(
+			`Invalid AS_OF_DATE provided: ${process.env.AS_OF_DATE as string}`,
+		);
+	}
 
 	const counts: Record<ExpenseStatus, number> = {
 		[ExpenseStatus.APPROVED]: 0,
@@ -185,7 +194,13 @@ async function main() {
 			rates = await getRatesForDate(dateKey, ratesCache);
 		}
 
-		const result = await validator.validate(expense, employee, policy, rates);
+		const result = await validator.validate(
+			expense,
+			employee,
+			policy,
+			rates,
+			asOf,
+		);
 		counts[result.status] += 1;
 
 		if (result.alerts.length > 0) {
