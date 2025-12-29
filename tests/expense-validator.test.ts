@@ -1,4 +1,3 @@
-import { ExpenseValidator } from "../src/engine/expense-validator";
 import type { Employee } from "../src/domain/employee";
 import {
 	type Expense,
@@ -6,6 +5,8 @@ import {
 	ExpenseStatus,
 } from "../src/domain/expense";
 import type { Policy } from "../src/domain/policy";
+import { ExpenseValidator } from "../src/engine/expense-validator";
+import * as fx from "../src/utils/fx";
 
 function makePolicy(overrides?: Partial<Policy>): Policy {
 	return {
@@ -52,6 +53,7 @@ describe("ExpenseValidator (Part 1)", () => {
 
 	afterEach(() => {
 		jest.useRealTimers();
+		jest.restoreAllMocks();
 	});
 
 	test("age rule: APPROVED when daysOld is less than or equal to pendingAfterDays", async () => {
@@ -150,6 +152,23 @@ describe("ExpenseValidator (Part 1)", () => {
 			currency: "CLP",
 		});
 
+		// Mock fetchLatestRates to return a specific rate
+		// Here we want 50 CLP to become 100 USD, so 1 CLP = 2 USD.
+		// Base is USD.
+		// Formula: (amount / fromRate) * toRate
+		// (50 / X) * 1 = 100 => 50/X = 100 => X = 0.5
+		// So CLP rate should be 0.5 (relative to base USD=1? No, wait)
+		// API usually returns rates relative to base.
+		// If base is USD, then USD=1.
+		// If 1 USD = 0.5 CLP, then 50 CLP = 100 USD.
+		jest.spyOn(fx, "fetchLatestRates").mockResolvedValue({
+			base: "USD",
+			rates: {
+				USD: 1,
+				CLP: 0.5,
+			},
+		});
+
 		const result = await engine.validate(expense, employee, policy);
 		expect(result.status).toBe(ExpenseStatus.APPROVED); // 100 USD <= 100 approvedUpTo
 		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
@@ -172,8 +191,18 @@ describe("ExpenseValidator (Part 1)", () => {
 			currency: "CLP",
 		});
 
+		// Mock rates: 1 USD = 900 CLP.
+		// 200,000 CLP / 900 = 222.22 USD.
+		jest.spyOn(fx, "fetchLatestRates").mockResolvedValue({
+			base: "USD",
+			rates: {
+				USD: 1,
+				CLP: 900,
+			},
+		});
+
 		const result = await engine.validate(expense, employee, policy);
-		expect(result.status).toBe(ExpenseStatus.REJECTED); // 160 USD > 150 pendingUpTo
+		expect(result.status).toBe(ExpenseStatus.REJECTED); // 222 USD > 150 pendingUpTo
 		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
 			true,
 		);
