@@ -56,7 +56,7 @@ async function fetchRates(
  * Fetches the latest exchange rates from Open Exchange Rates API.
  */
 export async function fetchLatestRates(): Promise<ExchangeRates> {
-	const url = `${process.env.OPEN_EXCHANGE_RATES_BASE_URL}api/latest.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
+	const url = `${process.env.OPEN_EXCHANGE_RATES_BASE_URL || "https://openexchangerates.org"}/api/latest.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
 	return fetchRates(url, "latest");
 }
 
@@ -67,7 +67,7 @@ export async function fetchLatestRates(): Promise<ExchangeRates> {
 export async function fetchRatesForDate(
 	dateKey: string,
 ): Promise<ExchangeRates> {
-	const url = `${process.env.OPEN_EXCHANGE_RATES_BASE_URL}api/historical/${dateKey}.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
+	const url = `${process.env.OPEN_EXCHANGE_RATES_BASE_URL || "https://openexchangerates.org"}/api/historical/${dateKey}.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
 	return fetchRates(url, dateKey);
 }
 
