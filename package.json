@@ -23,11 +23,11 @@
 	},
 	"homepage": "https://github.com/bifurcaria/spending-rules-engine#readme",
 	"devDependencies": {
-		"@jest/test-sequencer": "^30.2.0",
-		"@types/jest": "^30.0.0",
-		"@types/node": "^25.0.3",
-		"jest": "^30.2.0",
-		"ts-jest": "^29.4.6",
+		"@jest/test-sequencer": "^29.7.0",
+		"@types/jest": "^29.5.12",
+		"@types/node": "^20.11.0",
+		"jest": "^29.7.0",
+		"ts-jest": "^29.1.2",
 		"tsx": "^4.21.0",
 		"typescript": "^5.9.3"
 	},
