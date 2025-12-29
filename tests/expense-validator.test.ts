@@ -1,4 +1,4 @@
-import { ExpenseValidator } from "../dist/engine/expense-validator";
+import { ExpenseValidator } from "../src/engine/expense-validator";
 import type { Employee } from "../src/domain/employee";
 import {
 	type Expense,
