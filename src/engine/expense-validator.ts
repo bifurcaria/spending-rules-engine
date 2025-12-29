@@ -13,6 +13,7 @@ type RuleContext = {
 	expense: Expense;
 	employee: Employee;
 	policy: Policy;
+	amountToCheck: number; // Added to avoid mutating expense.amount
 };
 
 export class ExpenseValidator {
@@ -22,35 +23,37 @@ export class ExpenseValidator {
 		policy: Policy,
 		rates?: ExchangeRates,
 	): Promise<ValidationResult> {
-		const ctx: RuleContext = { expense, employee, policy };
+		let amountToCheck = expense.amount;
 		const alerts: Alert[] = [];
 
 		// Handle currency mismatch
-		if (ctx.expense.currency !== ctx.policy.baseCurrency) {
-			const originalAmount = ctx.expense.amount;
-			const fromCurrency = ctx.expense.currency;
+		if (expense.currency !== policy.baseCurrency) {
+			const originalAmount = expense.amount;
+			const fromCurrency = expense.currency;
 			try {
 				const resolvedRates = rates ?? (await fetchLatestRates());
 				const convertedAmount = convertCurrency(
-					ctx.expense.amount,
-					ctx.expense.currency,
-					ctx.policy.baseCurrency,
+					expense.amount,
+					expense.currency,
+					policy.baseCurrency,
 					resolvedRates,
 				);
-				ctx.expense.amount = convertedAmount;
+				amountToCheck = convertedAmount;
 				alerts.push({
 					code: "CURRENCY_MISMATCH",
-					message: `Converting ${originalAmount.toFixed(2)} ${fromCurrency} --> ${convertedAmount.toFixed(2)} ${ctx.policy.baseCurrency}.`,
+					message: `Converting ${originalAmount.toFixed(2)} ${fromCurrency} --> ${convertedAmount.toFixed(2)} ${policy.baseCurrency}.`,
 				});
 			} catch (error) {
 				// Currency conversion failed - mark as PENDING for manual review
 				alerts.push({
 					code: "CURRENCY_CONVERSION_ERROR",
-					message: `Failed to convert ${originalAmount.toFixed(2)} ${fromCurrency} to ${ctx.policy.baseCurrency}: ${error instanceof Error ? error.message : "Unknown error"}. Manual review required.`,
+					message: `Failed to convert ${originalAmount.toFixed(2)} ${fromCurrency} to ${policy.baseCurrency}: ${error instanceof Error ? error.message : "Unknown error"}. Manual review required.`,
 				});
 				// Keep original amount - category limits won't apply correctly, but we've alerted
 			}
 		}
+
+		const ctx: RuleContext = { expense, employee, policy, amountToCheck };
 
 		// Check each rule and collect the most restrictive status
 		const ageStatus = this.checkAge(ctx, alerts);
@@ -108,20 +111,21 @@ export class ExpenseValidator {
 		// No policy for this category
 		if (!categoryPolicy) return ExpenseStatus.APPROVED;
 
+		// Use amountToCheck instead of ctx.expense.amount
 		// > pendingUpTo => REJECTED
-		if (ctx.expense.amount > categoryPolicy.pendingUpTo) {
+		if (ctx.amountToCheck > categoryPolicy.pendingUpTo) {
 			alerts.push({
 				code: "CATEGORY_LIMIT",
-				message: `$${ctx.expense.amount.toFixed(2)} exceeds maximum allowed ($${categoryPolicy.pendingUpTo.toFixed(2)}) for ${ctx.expense.category}.`,
+				message: `$${ctx.amountToCheck.toFixed(2)} exceeds maximum allowed ($${categoryPolicy.pendingUpTo.toFixed(2)}) for ${ctx.expense.category}.`,
 			});
 			return ExpenseStatus.REJECTED;
 		}
 
 		// (approvedUpTo, pendingUpTo] => PENDING
-		if (ctx.expense.amount > categoryPolicy.approvedUpTo) {
+		if (ctx.amountToCheck > categoryPolicy.approvedUpTo) {
 			alerts.push({
 				code: "CATEGORY_LIMIT",
-				message: `$${ctx.expense.amount.toFixed(2)} exceeds auto-approval limit ($${categoryPolicy.approvedUpTo.toFixed(2)}), requires review.`,
+				message: `$${ctx.amountToCheck.toFixed(2)} exceeds auto-approval limit ($${categoryPolicy.approvedUpTo.toFixed(2)}), requires review.`,
 			});
 			return ExpenseStatus.PENDING;
 		}
