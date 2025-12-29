@@ -11,7 +11,7 @@ import {
 } from "../domain/expense";
 import type { Policy } from "../domain/policy";
 import { ExpenseValidator } from "../engine/expense-validator";
-import { type ExchangeRates, fetchLatestRates } from "../utils/fx";
+import { type ExchangeRates, fetchRatesForDate } from "../utils/fx";
 
 // Define Zod Schema for CSV Row
 const CsvRowSchema = z.object({
@@ -99,7 +99,7 @@ async function getRatesForDate(
 ): Promise<ExchangeRates> {
 	const cached = cache.get(dateKey);
 	if (cached) return cached;
-	const fetched = await fetchLatestRates();
+	const fetched = await fetchRatesForDate(dateKey);
 	cache.set(dateKey, fetched);
 	return fetched;
 }
