@@ -13,40 +13,36 @@ export interface ExchangeRates {
 	rates: Record<string, number>;
 }
 
-/**
- * Fetches the latest exchange rates from Open Exchange Rates API.
- * @throws {Error} If the API request fails or returns an error response
- */
-export async function fetchLatestRates(): Promise<ExchangeRates> {
-	const url = `https://openexchangerates.org/api/latest.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
-
+async function fetchRates(
+	url: string,
+	context: string,
+): Promise<ExchangeRates> {
 	let response: Response;
 	try {
 		response = await fetch(url);
 	} catch (error) {
 		throw new Error(
-			`Failed to fetch exchange rates: ${error instanceof Error ? error.message : "Network error"}`,
+			`Failed to fetch rates (${context}): ${error instanceof Error ? error.message : "Network error"}`,
 		);
 	}
 
 	if (!response.ok) {
 		throw new Error(
-			`Exchange rate API returned ${response.status}: ${response.statusText}`,
+			`Exchange rate API returned ${response.status} (${context}): ${response.statusText}`,
 		);
 	}
 
 	const data: LatestRatesResponse = await response.json();
 
-	// Check if API returned an error (e.g., invalid_app_id)
 	if (data.error === true) {
 		throw new Error(
-			`Exchange rate API error: ${data.message || "Unknown error"}${data.description ? ` - ${data.description}` : ""}`,
+			`Exchange rate API error (${context}): ${data.message || "Unknown error"}${data.description ? ` - ${data.description}` : ""}`,
 		);
 	}
 
 	if (!data.rates || typeof data.rates !== "object") {
 		throw new Error(
-			`Invalid response from exchange rate API: expected 'rates' to be an object`,
+			`Invalid response from exchange rate API (${context}): expected 'rates' to be an object`,
 		);
 	}
 
@@ -54,6 +50,25 @@ export async function fetchLatestRates(): Promise<ExchangeRates> {
 		base: data.base || "USD",
 		rates: data.rates,
 	};
+}
+
+/**
+ * Fetches the latest exchange rates from Open Exchange Rates API.
+ */
+export async function fetchLatestRates(): Promise<ExchangeRates> {
+	const url = `${process.env.OPEN_EXCHANGE_RATES_BASE_URL}api/latest.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
+	return fetchRates(url, "latest");
+}
+
+/**
+ * Fetches historical exchange rates for a specific UTC date (YYYY-MM-DD).
+ * @param dateKey ISO date string in the form YYYY-MM-DD
+ */
+export async function fetchRatesForDate(
+	dateKey: string,
+): Promise<ExchangeRates> {
+	const url = `${process.env.OPEN_EXCHANGE_RATES_BASE_URL}api/historical/${dateKey}.json?app_id=${process.env.OPEN_EXCHANGE_RATES_APP_ID}`;
+	return fetchRates(url, dateKey);
 }
 
 /**
