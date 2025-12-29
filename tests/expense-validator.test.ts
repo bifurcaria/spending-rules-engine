@@ -145,27 +145,22 @@ describe("ExpenseValidator (Part 1)", () => {
 			},
 		});
 		const employee = makeEmployee();
-		// 50 CLP -> 100 USD (mock doubles the amount)
+		// Mock fetchLatestRates with a realistic rate (e.g., ~950 CLP per USD)
+		// We want 50 CLP -> 100 USD?? No, that would mean 1 CLP = 2 USD.
+		// Let's adjust the test case to be realistic.
+		// To get ~100 USD from CLP at ~950 rate:
+		// 95,000 CLP / 950 = 100 USD.
 		const expense = makeExpense({
 			category: ExpenseCategory.FOOD,
-			amount: 50,
+			amount: 95_000,
 			currency: "CLP",
 		});
 
-		// Mock fetchLatestRates to return a specific rate
-		// Here we want 50 CLP to become 100 USD, so 1 CLP = 2 USD.
-		// Base is USD.
-		// Formula: (amount / fromRate) * toRate
-		// (50 / X) * 1 = 100 => 50/X = 100 => X = 0.5
-		// So CLP rate should be 0.5 (relative to base USD=1? No, wait)
-		// API usually returns rates relative to base.
-		// If base is USD, then USD=1.
-		// If 1 USD = 0.5 CLP, then 50 CLP = 100 USD.
 		jest.spyOn(fx, "fetchLatestRates").mockResolvedValue({
 			base: "USD",
 			rates: {
 				USD: 1,
-				CLP: 0.5,
+				CLP: 950,
 			},
 		});
 
@@ -184,15 +179,12 @@ describe("ExpenseValidator (Part 1)", () => {
 			},
 		});
 		const employee = makeEmployee();
-		// 200,000 CLP -> ~221 USD with live rates (CLP ~902/USD), exceeds pendingUpTo
 		const expense = makeExpense({
 			category: ExpenseCategory.FOOD,
 			amount: 200_000,
 			currency: "CLP",
 		});
 
-		// Mock rates: 1 USD = 900 CLP.
-		// 200,000 CLP / 900 = 222.22 USD.
 		jest.spyOn(fx, "fetchLatestRates").mockResolvedValue({
 			base: "USD",
 			rates: {
