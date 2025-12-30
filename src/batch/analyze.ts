@@ -10,7 +10,7 @@ import {
 	ExpenseStatus,
 } from "../domain/expense";
 import type { Policy } from "../domain/policy";
-import { ExpenseValidator } from "../engine/expense-validator";
+import { validateExpense } from "../engine/expense-validator";
 import { type ExchangeRates, fetchRatesForDate } from "../utils/fx";
 
 // Define Zod Schema for CSV Row
@@ -25,9 +25,7 @@ const CsvRowSchema = z.object({
 		.number()
 		.refine((n) => Number.isFinite(n), { message: "Monto must be a number" }),
 	moneda: z.string().min(1, "Moneda requerida"),
-	fecha: z.iso.datetime({
-		message: "Fecha inválida, debe ser ISO 8601 (YYYY-MM-DD)",
-	}),
+	fecha: z.iso.date({ message: "Fecha inválida, debe ser YYYY-MM-DD" }),
 });
 
 type ParsedRow = z.infer<typeof CsvRowSchema>;
@@ -140,7 +138,6 @@ async function main() {
 	}
 
 	const { rows, invalidRows } = await readCsv(csvPath);
-	const validator = new ExpenseValidator();
 	const policy = makePolicy();
 	const asOf =
 		process.env.AS_OF_DATE !== undefined
@@ -204,7 +201,7 @@ async function main() {
 			rates = await getRatesForDate(dateKey, ratesCache);
 		}
 
-		const result = await validator.validate(
+		const result = await validateExpense(
 			expense,
 			employee,
 			policy,
