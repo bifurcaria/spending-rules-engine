@@ -10,8 +10,71 @@ import {
 	ExpenseStatus,
 } from "../domain/expense";
 import type { Policy } from "../domain/policy";
+import type { Alert } from "../domain/result";
 import { validateExpense } from "../engine/expense-validator";
 import { type ExchangeRates, fetchRatesForDate } from "../utils/fx";
+
+/**
+ * Translates alert codes to Spanish for client-facing output.
+ * The validator uses English internally; we translate here for the report.
+ */
+function translateAlert(alert: Alert): string {
+	const translations: Record<string, (msg: string) => string> = {
+		NEGATIVE_AMOUNT: () => "Monto no positivo",
+		CURRENCY_MISMATCH: (msg) => {
+			// Extract values from English message and rebuild in Spanish
+			const match = msg.match(/Converting ([\d.]+) (\w+) --> ([\d.]+) (\w+)/);
+			if (match) {
+				return `Conversión: ${match[1]} ${match[2]} → ${match[3]} ${match[4]}`;
+			}
+			return "Conversión de moneda aplicada";
+		},
+		CURRENCY_CONVERSION_ERROR: () =>
+			"Error de conversión de moneda, requiere revisión manual",
+		AGE_LIMIT: (msg) => {
+			const match = msg.match(/(\d+) days old.*Limit: (\d+)/);
+			if (match) {
+				return `Antigüedad: ${match[1]} días (límite: ${match[2]})`;
+			}
+			const reviewMatch = msg.match(/(\d+) days old/);
+			if (reviewMatch) {
+				return `Antigüedad: ${reviewMatch[1]} días, requiere revisión`;
+			}
+			return "Excede límite de antigüedad";
+		},
+		CATEGORY_LIMIT: (msg) => {
+			if (msg.includes("exceeds maximum")) {
+				const match = msg.match(
+					/\$([\d.]+) exceeds maximum.*\$([\d.]+).*for (\w+)/,
+				);
+				if (match) {
+					return `$${match[1]} excede máximo permitido ($${match[2]}) para ${match[3]}`;
+				}
+			}
+			if (msg.includes("exceeds auto-approval")) {
+				const match = msg.match(/\$([\d.]+) exceeds auto-approval.*\$([\d.]+)/);
+				if (match) {
+					return `$${match[1]} excede auto-aprobación ($${match[2]}), requiere revisión`;
+				}
+			}
+			return "Excede límite de categoría";
+		},
+		COST_CENTER_POLICY: (msg) => {
+			const match = msg.match(/Cost center '([^']+)'.*expense '([^']+)'/);
+			if (match) {
+				return `Centro de costo '${match[1]}' no puede reportar '${match[2]}'`;
+			}
+			return "Política de centro de costo violada";
+		},
+	};
+
+	const translator = translations[alert.code];
+	if (translator) {
+		return `[${alert.code}] ${translator(alert.message)}`;
+	}
+	// Fallback: return original if unknown code
+	return `[${alert.code}] ${alert.message}`;
+}
 
 // Define Zod Schema for CSV Row
 const CsvRowSchema = z.object({
@@ -23,7 +86,7 @@ const CsvRowSchema = z.object({
 	categoria: z.string(),
 	monto: z.coerce
 		.number()
-		.refine((n) => Number.isFinite(n), { message: "Monto must be a number" }),
+		.refine((n) => Number.isFinite(n), { message: "Monto debe ser un número" }),
 	moneda: z.string().min(1, "Moneda requerida"),
 	fecha: z.iso.date({ message: "Fecha inválida, debe ser YYYY-MM-DD" }),
 });
@@ -211,9 +274,7 @@ async function main() {
 		counts[result.status] += 1;
 
 		if (result.alerts.length > 0) {
-			const alertsText = result.alerts
-				.map((a) => `[${a.code}] ${a.message}`)
-				.join("\n");
+			const alertsText = result.alerts.map(translateAlert).join("\n");
 			alertsByExpense.push(`- ${expense.id}: ${alertsText}`);
 		}
 	}
