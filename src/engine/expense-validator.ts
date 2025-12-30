@@ -3,11 +3,7 @@ import { type Expense, ExpenseStatus } from "../domain/expense";
 import type { Policy } from "../domain/policy";
 import type { Alert, ValidationResult } from "../domain/result";
 import { daysBetween } from "../utils/date";
-import {
-	convertCurrency,
-	type ExchangeRates,
-	fetchLatestRates,
-} from "../utils/fx";
+import { convertCurrency, type ExchangeRates } from "../utils/fx";
 
 type RuleContext = {
 	expense: Expense;
@@ -22,7 +18,7 @@ export class ExpenseValidator {
 		expense: Expense,
 		employee: Employee,
 		policy: Policy,
-		rates?: ExchangeRates,
+		rates: ExchangeRates | undefined,
 		asOf: Date = new Date(),
 	): Promise<ValidationResult> {
 		if (expense.amount <= 0) {
@@ -44,15 +40,19 @@ export class ExpenseValidator {
 
 		// Handle currency mismatch
 		if (expense.currency !== policy.baseCurrency) {
+			if (!rates) {
+				throw new Error(
+					`Exchange rates are required to convert ${expense.currency} -> ${policy.baseCurrency}`,
+				);
+			}
 			const originalAmount = expense.amount;
 			const fromCurrency = expense.currency;
 			try {
-				const resolvedRates = rates ?? (await fetchLatestRates());
 				const convertedAmount = convertCurrency(
 					expense.amount,
 					expense.currency,
 					policy.baseCurrency,
-					resolvedRates,
+					rates,
 				);
 				amountToCheck = convertedAmount;
 				alerts.push({

@@ -21,12 +21,17 @@ const CsvRowSchema = z.object({
 	empleado_apellido: z.string(),
 	empleado_cost_center: z.string(),
 	categoria: z.string(),
-	monto: z.coerce.number(), // Coerce string to number
-	moneda: z.string(),
-	fecha: z.string().datetime({ offset: true }).or(z.string()), // Accept ISO string
+	monto: z.coerce
+		.number()
+		.refine((n) => Number.isFinite(n), { message: "Monto must be a number" }),
+	moneda: z.string().min(1, "Moneda requerida"),
+	fecha: z.iso.datetime({
+		message: "Fecha inválida, debe ser ISO 8601 (YYYY-MM-DD)",
+	}),
 });
 
 type ParsedRow = z.infer<typeof CsvRowSchema>;
+type InvalidRow = { raw: unknown; error: string };
 
 type Anomaly =
 	| { code: "NEGATIVE_AMOUNT"; gastoId: string; amount: number }
@@ -104,9 +109,12 @@ async function getRatesForDate(
 	return fetched;
 }
 
-async function readCsv(filePath: string): Promise<ParsedRow[]> {
+async function readCsv(
+	filePath: string,
+): Promise<{ rows: ParsedRow[]; invalidRows: InvalidRow[] }> {
 	return new Promise((resolve, reject) => {
 		const rows: ParsedRow[] = [];
+		const invalidRows: InvalidRow[] = [];
 		fs.createReadStream(filePath)
 			.pipe(csv())
 			.on("data", (data: unknown) => {
@@ -114,11 +122,13 @@ async function readCsv(filePath: string): Promise<ParsedRow[]> {
 				if (result.success) {
 					rows.push(result.data);
 				} else {
-					console.error("Invalid CSV row:", result.error);
-					// Decide whether to reject or skip. Here skipping.
+					invalidRows.push({
+						raw: data,
+						error: result.error.issues.map((issue) => issue.message).join("; "),
+					});
 				}
 			})
-			.on("end", () => resolve(rows))
+			.on("end", () => resolve({ rows, invalidRows }))
 			.on("error", (err: unknown) => reject(err));
 	});
 }
@@ -129,7 +139,7 @@ async function main() {
 		throw new Error(`CSV not found at ${csvPath}`);
 	}
 
-	const rows = await readCsv(csvPath);
+	const { rows, invalidRows } = await readCsv(csvPath);
 	const validator = new ExpenseValidator();
 	const policy = makePolicy();
 	const asOf =
@@ -242,6 +252,25 @@ async function main() {
 		} else {
 			summaryLines.push(
 				`- DUPLICATE: gasto ${a.gastoId} duplica ${a.firstGastoId} (${a.amount} ${a.currency} en ${a.date})`,
+			);
+		}
+	}
+
+	if (invalidRows.length > 0) {
+		summaryLines.push(
+			"",
+			"## Filas inválidas omitidas",
+			`- Total: ${invalidRows.length}`,
+		);
+		const maxInvalidToShow = 5;
+		invalidRows.slice(0, maxInvalidToShow).forEach((ir, idx) => {
+			summaryLines.push(
+				`- ROW_${idx + 1}: ${ir.error}; raw=${JSON.stringify(ir.raw)}`,
+			);
+		});
+		if (invalidRows.length > maxInvalidToShow) {
+			summaryLines.push(
+				`- ... ${invalidRows.length - maxInvalidToShow} más omitidas`,
 			);
 		}
 	}

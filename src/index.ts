@@ -2,6 +2,7 @@ import type { Employee } from "./domain/employee";
 import { ExpenseCategory } from "./domain/expense";
 import type { Policy } from "./domain/policy";
 import { ExpenseValidator } from "./engine/expense-validator";
+import { fetchLatestRates } from "./utils/fx";
 
 console.log("Setting up Expense Rules Engine Skeleton...");
 
@@ -41,7 +42,8 @@ const employee: Employee = {
 
 (async () => {
 	try {
-		const result = await engine.validate(expense, employee, policy);
+		const rates = await fetchLatestRates();
+		const result = await engine.validate(expense, employee, policy, rates);
 		console.log(JSON.stringify(result, null, 2));
 	} catch (error) {
 		console.error("Validation error:", error);
