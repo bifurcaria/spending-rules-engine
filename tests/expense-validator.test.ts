@@ -5,8 +5,7 @@ import {
 	ExpenseStatus,
 } from "../src/domain/expense";
 import type { Policy } from "../src/domain/policy";
-import { ExpenseValidator } from "../src/engine/expense-validator";
-import * as fx from "../src/utils/fx";
+import { validateExpense } from "../src/engine/expense-validator";
 
 function makePolicy(overrides?: Partial<Policy>): Policy {
 	return {
@@ -43,9 +42,7 @@ function makeExpense(overrides?: Partial<Expense>): Expense {
 	};
 }
 
-describe("ExpenseValidator (Part 1)", () => {
-	const engine = new ExpenseValidator();
-
+describe("validateExpense (Part 1)", () => {
 	beforeEach(() => {
 		jest.useFakeTimers();
 		jest.setSystemTime(new Date("2025-01-31T12:00:00.000Z"));
@@ -61,7 +58,7 @@ describe("ExpenseValidator (Part 1)", () => {
 		const employee = makeEmployee();
 		const expense = makeExpense({ date: new Date("2025-01-21T00:00:00.000Z") }); // ~10 days old
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.APPROVED);
 		expect(result.alerts).toEqual([]);
 	});
@@ -71,7 +68,7 @@ describe("ExpenseValidator (Part 1)", () => {
 		const employee = makeEmployee();
 		const expense = makeExpense({ date: new Date("2024-12-20T00:00:00.000Z") }); // ~42 days old
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.PENDING);
 		expect(result.alerts.some((a) => a.code === "AGE_LIMIT")).toBe(true);
 	});
@@ -81,7 +78,7 @@ describe("ExpenseValidator (Part 1)", () => {
 		const employee = makeEmployee();
 		const expense = makeExpense({ date: new Date("2024-11-01T00:00:00.000Z") }); // ~91 days old
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "AGE_LIMIT")).toBe(true);
 	});
@@ -98,7 +95,7 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 90,
 		});
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.APPROVED);
 		expect(result.alerts).toEqual([]);
 	});
@@ -115,7 +112,7 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 120,
 		});
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.PENDING);
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 	});
@@ -132,7 +129,7 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 160,
 		});
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 	});
@@ -145,26 +142,21 @@ describe("ExpenseValidator (Part 1)", () => {
 			},
 		});
 		const employee = makeEmployee();
-		// Mock fetchLatestRates with a realistic rate (e.g., ~950 CLP per USD)
-		// We want 50 CLP -> 100 USD?? No, that would mean 1 CLP = 2 USD.
-		// Let's adjust the test case to be realistic.
-		// To get ~100 USD from CLP at ~950 rate:
-		// 95,000 CLP / 950 = 100 USD.
 		const expense = makeExpense({
 			category: ExpenseCategory.FOOD,
 			amount: 95_000,
 			currency: "CLP",
 		});
 
-		jest.spyOn(fx, "fetchLatestRates").mockResolvedValue({
+		const mockRates = {
 			base: "USD",
 			rates: {
 				USD: 1,
 				CLP: 950,
 			},
-		});
+		};
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, mockRates);
 		expect(result.status).toBe(ExpenseStatus.APPROVED); // 100 USD <= 100 approvedUpTo
 		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
 			true,
@@ -185,15 +177,15 @@ describe("ExpenseValidator (Part 1)", () => {
 			currency: "CLP",
 		});
 
-		jest.spyOn(fx, "fetchLatestRates").mockResolvedValue({
+		const mockRates = {
 			base: "USD",
 			rates: {
 				USD: 1,
 				CLP: 900,
 			},
-		});
+		};
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, mockRates);
 		expect(result.status).toBe(ExpenseStatus.REJECTED); // 222 USD > 150 pendingUpTo
 		expect(result.alerts.some((a) => a.code === "CURRENCY_MISMATCH")).toBe(
 			true,
@@ -213,7 +205,7 @@ describe("ExpenseValidator (Part 1)", () => {
 		const employee = makeEmployee({ costCenterId: "core_engineering" });
 		const expense = makeExpense({ category: ExpenseCategory.FOOD });
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "COST_CENTER_POLICY")).toBe(
 			true,
@@ -238,7 +230,7 @@ describe("ExpenseValidator (Part 1)", () => {
 			amount: 120, // would be PENDING by category limit, but cost center forces REJECTED
 		});
 
-		const result = await engine.validate(expense, employee, policy);
+		const result = await validateExpense(expense, employee, policy, undefined);
 		expect(result.status).toBe(ExpenseStatus.REJECTED);
 		expect(result.alerts.some((a) => a.code === "CATEGORY_LIMIT")).toBe(true);
 		expect(result.alerts.some((a) => a.code === "COST_CENTER_POLICY")).toBe(
